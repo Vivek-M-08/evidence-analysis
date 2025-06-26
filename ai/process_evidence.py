@@ -96,15 +96,14 @@ def extract_structured_response(response_text):
     return {"answers": answers, "reasonings": reasonings}
 
 # --- MAIN FUNCTION ---
-def analyze_evidence(image_url: str, questions: str, use_openai: bool = False):
-    prompt = f"""You are an educational evidence validator. Analyze this image, which is field evidence from a Project-Based Learning classroom in Bihar, India.
+def analyze_evidence(image_url: str, prompt: str, use_openai: bool = False):
+#     prompt = f"""You are an educational evidence validator. Analyze this image, which is field evidence from a Project-Based Learning classroom in Bihar, India.
+# Please analyze this image carefully and answer with ONLY 'yes' or 'no' for each question below separated by commas:
+# {questions}
+# Consider all visible elements and context. Explain your reasoning for each answer briefly.
+# """
 
-Please analyze this image carefully and answer with ONLY 'yes' or 'no' for each question below separated by commas:
-
-{questions}
-
-Consider all visible elements and context. Explain your reasoning for each answer briefly.
-"""
+    print(f"[Prompt]:\n{prompt}\n")
 
     # Step 1: Gemini
     for _ in range(MAX_RETRIES):
@@ -121,8 +120,8 @@ Consider all visible elements and context. Explain your reasoning for each answe
             )
             response_json = json.loads(gemini_response.text)
             relevance = calculate_relevance_tag(response_json.get("answers", []))
-            print(f"[Gemini Response] {response_json}")
-            print(f"[Relevance Tag] {relevance} \n")
+            print(f"[Gemini Response] = {response_json}")
+            print(f"[Relevance Tag] = {relevance} \n")
             return {
                 "source": "gemini",
                 "answers": response_json.get("answers"),

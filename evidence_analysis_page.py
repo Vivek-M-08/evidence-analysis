@@ -43,14 +43,18 @@ def show():
     with col2:
         st.markdown("<div style='font-size:24px; font-weight:600;'>🔗 Paste Evidence Link</div>", unsafe_allow_html=True)
         image_url = st.text_area("Image URL", height=150)
+        default_prompt = """You are an educational evidence validator. Analyse this image as field evidence from a PBL classroom in Bihar, India. Answer the added questions with 'YES' or 'NO', consider all visible elements and context. Explain your reasoning for each answer briefly."""
+        prompt_text = st.text_area("Prompt (Editable)", value=default_prompt, height=150)
+        context = prompt_text + "\n\n" + "\n".join([f"{i+1}. {q}" for i, q in enumerate(question_inputs) if q.strip()])
+
         if st.button("🔍 Analyse", use_container_width=True):
             if not image_url.strip():
                 st.warning("Please provide an evidence link.")
             elif not any(q.strip() for q in question_inputs):
                 st.warning("Please enter at least one question.")
             else:
-                questions = "\n".join([q for q in question_inputs if q.strip()])
-                result = analyze_evidence(image_url, questions, use_openai=False)
+                # questions = "\n".join([q for q in question_inputs if q.strip()])
+                result = analyze_evidence(image_url, context, use_openai=False)
                 
                 if "error" in result:
                     st.error(f"❌ Error: {result['error']}")
