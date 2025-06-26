@@ -36,7 +36,7 @@ def show():
         st.markdown("<div style='font-size:24px; font-weight:600;'>📋 Enter Questions</div>", unsafe_allow_html=True)
         question_inputs = []
         for i in range(1, 8):
-            q = st.text_input(f"{i}.", key=f"question_{i}")
+            q = st.text_area(f"{i}.", key=f"question_{i}",  height=100)
             question_inputs.append(q)
 
     # Column 2: Evidence Link Input + Analyse Button
@@ -59,15 +59,6 @@ def show():
                     st.session_state["questions"] = question_inputs
                     st.session_state["ai_result"] = result
                     st.session_state["analysed"] = True
-
-        # if st.button("🔍 Analyse", use_container_width=True):
-        #     if not image_url.strip():
-        #         st.warning("Please provide an evidence link.")
-        #     else:
-        #         st.session_state["image_url"] = image_url
-        #         st.session_state["questions"] = question_inputs
-        #         st.session_state["analysed"] = True
-
 
     # Column 3: Image Preview
     with col3:

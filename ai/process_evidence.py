@@ -10,7 +10,7 @@ from openai import OpenAI
 import typing_extensions as typing
 
 # --- CONFIGURATION ---
-GEMINI_TOKENS = ["AIzaSyCpxpErkI_DgECepEvwYgEoz1Wwg4vlgUE", "GEMINI_1"]
+GEMINI_TOKENS = ["AIzaSyCpxpErkI_DgECepEvwYgEoz1Wwg4vlgUE", "AIzaSyDJloG03NCFbmnlhYikymXSpfIEYsF9c_4"]
 TOGETHER_TOKEN = "your-llama-token"
 MAX_RETRIES = 3
 current_token_index = 0
