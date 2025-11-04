@@ -4,7 +4,7 @@ from ai.process_evidence import analyze_evidence
 def show():
     st.set_page_config(page_title="Evidence Analysis", layout="wide")
 
-    # Header row: Title centered, Logout on the right
+    # Header row: Title centered, Reports and Logout on the right
     col1, col2, col3 = st.columns([1, 2, 1])
 
     with col1:
@@ -15,12 +15,23 @@ def show():
 
     with col3:
         st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
-        if st.button("🚪 Logout"):
-            st.session_state.clear()
-            st.rerun()
+        
+        # Create two columns for Reports and Logout buttons
+        btn_col1, btn_col2 = st.columns(2)
+        
+        with btn_col1:
+            if st.button("📊 Reports"):
+                st.session_state["show_reports"] = True
+                st.rerun()
+        
+        with btn_col2:
+            if st.button("🚪 Logout"):
+                st.session_state.clear()
+                st.rerun()
+        
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Colored horizontal line (simple styled <hr>)
+    # Colored horizontal line (simple styled <hr>)
     st.markdown("""
         <hr style='border: 2px solid #0f4c81; margin-top: 10px; margin-bottom: 20px;' />
     """, unsafe_allow_html=True)
@@ -53,7 +64,6 @@ def show():
             elif not any(q.strip() for q in question_inputs):
                 st.warning("Please enter at least one question.")
             else:
-                # questions = "\n".join([q for q in question_inputs if q.strip()])
                 result = analyze_evidence(image_url, context, use_openai=False)
                 
                 if "error" in result:
@@ -76,7 +86,6 @@ def show():
     with col4:
         st.markdown("<div style='font-size:24px; font-weight:600;'>🧠 Output Summary</div>", unsafe_allow_html=True)
         if st.session_state.get("analysed", False):
-            # st.text_area("AI-generated Output", value="(AI summary will appear here)", height=300)
             result = st.session_state.get("ai_result", {})
             if result:
                 st.markdown("**🟢 Relevance Tag:** " + result.get("relevance", "Unknown"))
