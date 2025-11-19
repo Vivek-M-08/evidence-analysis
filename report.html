@@ -428,45 +428,6 @@
             user-select: none;
         }
 
-        .top-blocks, .bottom-blocks {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            margin: 20px 0;
-        }
-
-        .blocks-title {
-            font-size: 1.4em;
-            color: #4a5568;
-            margin-bottom: 20px;
-            font-weight: 600;
-        }
-
-        .block-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .block-item:last-child {
-            border-bottom: none;
-        }
-
-        .block-name {
-            font-weight: 600;
-            color: #2d3748;
-        }
-
-        .block-stats {
-            display: flex;
-            gap: 20px;
-            color: #718096;
-            font-size: 0.9em;
-        }
-
         .percentage-badge {
             background: linear-gradient(45deg, #4facfe, #00f2fe);
             color: white;
@@ -772,8 +733,6 @@
                     </div>
                 </div>
                 
-                <div id="topBottomBlocks" class="grid grid-2 mt-8">
-                </div>
             </div>
         </div>
     </div>
@@ -1498,52 +1457,6 @@
 
         window.currentDistrictStats = districtStats;
         generateBiharMap(districtStats);
-
-        // Top/Bottom Blocks
-        let blockArr = Object.entries(blockStats).map(([b,st])=>[b, st.total > 0 ? ((st.Relevant/st.total)*100).toFixed(1) : 0, st.schools.size, st.total]);
-        blockArr.sort((a,b)=>b[1]-a[1]);
-        let top15 = blockArr.slice(0,15);
-        let bottom15 = blockArr.slice(-15);
-        
-        let tbHtml = `
-            <div class="grid grid-2">
-                <div class="top-blocks">
-                    <div class="blocks-title">🏆 Top 15 Blocks (by % Relevant)</div>
-        `;
-        top15.forEach((block, index) => { 
-            tbHtml += `
-                <div class="block-item">
-                    <div class="block-name">#${index + 1} ${block[0]}</div>
-                    <div class="block-stats">
-                        <span>Schools: ${block[2]}</span>
-                        <span>Evidence: ${block[3]}</span>
-                        <span class="percentage-badge">${block[1]}%</span>
-                    </div>
-                </div>
-            `; 
-        });
-        tbHtml += `
-                </div>
-                <div class="bottom-blocks">
-                    <div class="blocks-title">📉 Bottom 15 Blocks (by % Relevant)</div>
-        `;
-        bottom15.forEach((block, index) => { 
-            tbHtml += `
-                <div class="block-item">
-                    <div class="block-name">#${bottom15.length - index} ${block[0]}</div>
-                    <div class="block-stats">
-                        <span>Schools: ${block[2]}</span>
-                        <span>Evidence: ${block[3]}</span>
-                        <span class="percentage-badge">${block[1]}%</span>
-                    </div>
-                </div>
-            `; 
-        });
-        tbHtml += `
-                </div>
-            </div>
-        `;
-        document.getElementById('topBottomBlocks').innerHTML = tbHtml;
     }
 
     // Map functions (unchanged)
