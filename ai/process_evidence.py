@@ -10,8 +10,8 @@ from openai import OpenAI
 import typing_extensions as typing
 
 # --- CONFIGURATION ---
-GEMINI_TOKENS = ["AIzaSyCpxpErkI_DgECepEvwYgEoz1Wwg4vlgUE", "AIzaSyDJloG03NCFbmnlhYikymXSpfIEYsF9c_4"]
-TOGETHER_TOKEN = "your-llama-token"
+GEMINI_TOKENS = ["AIzaSyBd6OzEf9lOS4UnuhLrpRBAbuW0lL2bsdM"]
+TOGETHER_TOKEN = "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"
 MAX_RETRIES = 3
 current_token_index = 0
 
