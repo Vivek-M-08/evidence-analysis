@@ -1,6 +1,6 @@
 import streamlit as st
 # Importing the REQUIRED function from the processor file
-from ai.thematic_processor import analyze_story_rating 
+from ai.story_processor import analyze_story_rating 
 import json
 
 def show():
@@ -10,9 +10,13 @@ def show():
         st.session_state["story_result"] = None
         st.session_state["story_image_urls"] = [] 
 
-    st.markdown("### 🌟 SG Voice: Story Ranker (PDF Mode)")
+    st.markdown("### 🎙️ SG Voice: Story Ranker")
     st.markdown("---")
-    st.markdown("Analyze and score a narrative. **Title** and **PDF Link** are mandatory. The **Story Content** box is optional, providing supplemental text if the PDF content is incomplete.")
+    st.markdown(
+    """Analyze and score a **Story** from the PDF document and rank it based on three critical criteria: Impact/Outcome, Issue/Challenge clarity, and Action Steps taken.  
+    <span style="color:#1E90FF;"><b>Input: From MI stories csv choose Title, Pdf columns</b></span>
+    """,unsafe_allow_html=True
+    )
     
     # --- Input Section ---
     col_input, col_model = st.columns([3, 1])
@@ -28,7 +32,7 @@ def show():
                                 placeholder="e.g., https://example.com/story_document.pdf")
 
         # 3. Image Links (Optional for AI, but stored for rendering)
-        image_url_input = st.text_area("3. Image Links (URLs, separated by |) - Optional", key="story_image_input", 
+        image_url_input = st.text_area("3. Image Links from Images column - Optional", key="story_image_input", 
                                   height=70,
                                   placeholder="e.g., link1.jpg | link2.png | link3.jpeg")
         
@@ -74,6 +78,16 @@ def show():
         
         if "error" in result:
             st.error(f"❌ Analysis Error: {result['error']}")
+            
+            # Show additional debug info if available
+            if "partial_response" in result:
+                with st.expander("🔍 Debug: Partial Response Received"):
+                    st.json(result['partial_response'])
+                    st.warning("The model returned incomplete data. Try running the analysis again or switch to a different model.")
+            
+            if "raw_response" in result:
+                with st.expander("🔍 Debug: Raw Model Response"):
+                    st.code(result['raw_response'], language="text")
         else:
             # 1. Image Preview and Summary Column
             st.markdown("### 🖼️ Story Snapshot & Composite Score")

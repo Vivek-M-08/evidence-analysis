@@ -3,10 +3,6 @@ import streamlit as st
 from ai.process_evidence import analyze_evidence
 
 def show():
-    # NOTE: The header (Title, Reports, Logout) is now handled in app.py
-
-    # An empty break line added (Removed the styled <hr> as it's now in app.py)
-    # st.markdown("<br>", unsafe_allow_html=True) 
 
     # Define layout columns
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])

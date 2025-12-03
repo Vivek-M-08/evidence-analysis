@@ -1,131 +1,272 @@
-# ai/thematic_processor.py
 import google.generativeai as genai
 import typing_extensions as typing
 import json
 import os
-import time
-import httpx
-import base64
-from typing import List, Dict, Any, Optional, Union
-import io
-import tempfile
+from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Load env variables
+load_dotenv()
 
 # --- External API Imports ---
-# Install these: pip install openai anthropic PyMuPDF
 try:
     from openai import OpenAI
 except ImportError:
-    OpenAI = None # Type placeholder if not installed
+    OpenAI = None
 
 try:
     from anthropic import Anthropic
 except ImportError:
-    Anthropic = None # Type placeholder if not installed
+    Anthropic = None
 
-try:
-    # PyMuPDF is the recommended library for robust PDF processing
-    import fitz # PyMuPDF
-    PDF_PROCESSOR_AVAILABLE = True
-except ImportError:
-    # Set a flag if the required PDF library is missing
-    PDF_PROCESSOR_AVAILABLE = False
-    class fitz: # Mock class to prevent import errors in type hints
-        @staticmethod
-        def open(*args, **kwargs): pass
+# --- API Key Configuration ---
+# Get Gemini keys and pick the first one for default usage
+gemini_env = os.getenv("GEMINI_API_KEYS", "")
+gemini_keys = [key.strip() for key in gemini_env.split(",") if key.strip()]
+GEMINI_API_KEY = gemini_keys[0] if gemini_keys else None
 
+CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+CHATGPT_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# --- PII and Classification Theme Data (Unchanged) ---
+# --- PII and Classification Theme Data ---
 
 CLASSIFICATION_PROMPT = """
 # Educational Challenge Classification Prompt
+
+## Overview
 
 You are an expert data classifier specializing in educational barrier analysis. Your task is to analyze a list of challenges affecting children's education and classify each challenge into predefined themes while identifying any Personal Identifiable Information (PII).
 
 ## Classification Themes
 
 ### Theme 1: Poverty and Economic Barriers
-**Definition:** This theme captures insights where families link irregular school attendance or dropouts to financial hardship. It includes responses describing how poverty forces children to prioritize work over education, how households depend on children's income for survival, and how limited resources—such as inability to afford uniforms, books, or transport—become barriers to schooling.
 
-### Theme 2: Legal Document-linked Barriers
-**Definition:** This theme includes responses where children are unable to enroll in school due to missing or incomplete legal documents such as Aadhaar cards, birth certificates, or identity proofs. It captures how lack of proper documentation creates administrative hurdles that keep children out of the education system.
+**Definition:** Insights where families link irregular school attendance or dropouts to financial hardship. It includes responses describing how poverty forces children to prioritise work over education, how households depend on children's income for survival, and how limited resources—such as inability to afford uniforms, books, or transport—become barriers to schooling.
+
+**Examples:**
+- Due to economic constraints, families force girls to engage in domestic work or labour, which hinders their education
+-  Due to poor financial condition, the girl is not able to study
+- Poverty in the society is another challenge that affects education
+-Financial constraints and poverty were major challenges for some families in educating their daughters
+- Unemployment in the family is a significant problem that affects children's education
+-  Financial difficulties greatly affect a child's education
+
+---
+
+### Theme 2: Legal Document linked Barriers
+
+**Definition:** Children are unable to enroll in school due to missing or incomplete legal documents such as Aadhaar cards, birth certificates, or identity proofs. It captures how lack of proper documentation creates administrative hurdles that keep children out of the education system.
+
+**Examples:**
+- Aadhar cards of children have not been made, due to which they are not getting admission in school
+- Due to lack of Aadhar cards, schools in the community are facing challenges in enrolling children
+-Children are not getting admission due to lack of Aadhaar card, which is affecting their education
+
+---
 
 ### Theme 3: Early Marriage
-**Definition:** This theme captures responses where child marriage or early marriage prevents girls from continuing their education. It includes situations where early marriage leads to school dropout, limits learning opportunities, or shifts responsibilities toward household duties instead of schooling.
+
+**Definition:** Child marriage or early marriage prevents girls from continuing their education. It includes situations where early marriage leads to school dropout, limits learning opportunities, or shifts responsibilities toward household duties instead of schooling.
+
+**Examples:**
+- Child marriage is a prevalent issue in the community
+- Child marriage is prevalent which causes girls to drop out of school before completing their education
+
+---
 
 ### Theme 4: Distance and Accessibility Issues
-**Definition:** This theme captures challenges that prevent children from attending school due to physical and environmental conditions. It includes long distances to school, poor road or transport infrastructure, and difficulties caused by weather or seasonal factors (such as heavy rains, heat, or floods). These conditions make daily travel to school inconvenient, unreliable, or physically demanding for children.
+
+**Definition:** Challenges that prevent children from attending school due to physical and environmental conditions. It includes long distances to school, poor road or transport infrastructure, and difficulties caused by weather or seasonal factors (such as heavy rains, heat, or floods). These conditions make daily travel to school inconvenient, unreliable, or physically demanding for children.
+
+**Examples:**
+-  The school is very far from the village
+- If the school is far away, children cannot go there
+-  The child is unable to reach school due to rain
+- There is no school in the village, the school is very far from the village, due to this the girls leave their studies midway
+- The transportation system is a significant problem, making it difficult for children to reach school on time
+-There is a lack of buses for children and teachers to come to class
+- Children are not able to go to school because the school is far away and the roads are bad so they cannot go to study
+- The child is unable to go to school because of the heat
+- Sun, heat, rain and rain create hindrance in studies
+
+---
 
 ### Theme 5: Parental Attitudes and Socio-Cultural Barriers
-**Definition:** This theme captures responses where parental beliefs, family mindsets, and cultural norms discourage girls from attending school. It includes attitudes such as prioritizing domestic roles for girls, believing education is unnecessary for them, concerns about dowry increasing with higher education, or long-standing traditions that limit girls' mobility and learning opportunities. These socio-cultural factors collectively shape decisions that keep girls out of school.
+
+**Definition:** Parental beliefs, family mindsets, and cultural norms discourage girls from attending school. It includes attitudes such as prioritizing domestic roles for girls, believing education is unnecessary for them, concerns about dowry increasing with higher education, or long-standing traditions that limit girls' mobility and learning opportunities. These socio-cultural factors collectively shape decisions that keep girls out of school.
+
+**Examples:**
+-  Cultural beliefs that girls do not need education because they will only get married and stay at home are a major challenge
+- Gender discrimination is a significant issue in the community, affecting the education and empowerment of girls
+- Purdah system is prevalent in Muslim community, due to which we do not send teenage girls out
+-  The community believes that educating girls will increase the demand for dowry
+-  Social discrimination based on caste or gender also leads to low participation
+- Social pressure was identified as another challenge that can prevent girls from pursuing their education
+- Girls leave their studies and run away. Due to this fear, parents are unable to provide higher education to their daughters
+- Parents are afraid that their daughters might get exposed to foul language and hence do not allow them to go to school
+- Girls are not allowed to study for fear of going astray or running away
+
+---
 
 ### Theme 6: School Infrastructure and Facility Issues
-**Definition:** This theme captures responses highlighting gaps in school facilities and infrastructure gaps. It includes issues such as inadequate classrooms, lack of basic amenities, insufficient learning resources, as well as delays, inconsistencies, or limited access to government schemes. Together, these systemic gaps reduce the attractiveness and effectiveness of schooling for children and families.
 
-### Theme 7: Unknown/Unclear (Add more themes if needed, based on the prompt's missing context - assuming only 6 were provided)
-**Definition:** Use this theme when the challenge statement is genuinely incomplete or incomprehensible.
+**Definition:** Captures responses highlighting gaps in school facilities and infrastructure gaps.  It includes issues such as inadequate classrooms, lack of basic amenities, insufficient learning resources, as well as delays, inconsistencies, or limited access to government schemes. Together, these systemic gaps reduce the attractiveness and effectiveness of schooling for children and families.
+
+**Examples:**
+- Our school children are not given books on time
+-  The benefits of government schemes are not being received, due to which children are not going to school
+- Children did not get uniforms
+- Sanitary pads are not provided in school
+- Mid day meals are not provided properly to the children in the school
+- Lack of toilets in schools
+- Girls face significant barriers to accessing education due to poor infrastructure and lack of resources
+-  Lack of school infrastructure, including poor classrooms, sanitation facilities, water, and transportation, hinders the learning environment
+-there is no water in the toilet
+- There is no fan facility in my school
+- Drinking water is a challenge in schools
+- There are not enough playgrounds for sports children
+- There are not enough playgrounds for sports children
+- - The environment around the school is not clean, which affects the health and well-being of children
+-  The library lacks sufficient books for students
+
+---
+
+### Theme 7: Teacher Capacity and Quality Issues
+
+**Definition:** Highlighting challenges related to insufficient teachers or concerns about teaching quality. It includes issues such as vacant positions, irregular teacher attendance, overburdened staff, and gaps in subject knowledge or pedagogy. These factors affect the learning environment and reduce children's motivation to attend school regularly.
+
+**Examples:**
+- There is a shortage of teachers in the school, due to which subject-wise studies are not done
+-The work of the teacher is not being done properly in our school
+-  Attendance of teachers is a problem
+-  Teachers do not come to school on time
+- Teachers do not pay attention to them
+- The quality of teachers is a major concern
+-  The community lacks education, training and management of teachers, which affects the quality of teaching
+- Lack of language-specific teachers in school
+-  Children's learning progress is a challenge
+- There is a lack of English medium education in government schools
+
+---
+
+### Theme 8: Safety Concerns
+
+**Definition:** Children's school attendance is affected by worries related to their overall safety and security. It covers issues such as unsafe routes, harassment, or any situation that makes families feel that the environment around schooling is not secure enough for children to travel or attend regularly.
+
+**Examples:**
+- The presence of stray dogs on the streets as children walk to school raises concerns about their safety
+- Violence against women is a significant issue
+- It is a challenge for parents in the village to protect their girls from molestation
+- Seeing the atmosphere of the village, there is a fear in the minds of parents that someone might tease their daughter
+- Musahar children face harassment from other children in school because of their caste, which causes them to develop fear and reluctance to go to school
+- The school premises do not have a boundary wall, which poses a security threat
+- Girls are harassed on their way to school due to which they are afraid and are refusing to go to school
+- The community raised concerns about the environment around the house
+
+---
+
+### Theme 9: Substance Abuse and Addiction
+
+**Definition:** Children's education is affected by alcohol or drug use within the family or community, as well as issues like gambling or addiction to online games. These problems create unstable home environments, distract children from studies, and contribute to irregular attendance or dropout.
+
+**Examples:**
+- Gambling addiction in children
+-  Children's education is affected by alcohol
+ - Drug addiction is a significant challenge that is affecting the education of children in the community
+- The father is an alcoholic, so the daughter is being forced to study
+- Alcohol addiction in a household member is a problem
+- Children use mobile phones more often
+- Children are increasingly playing online games using mobile phones
+
+---
+
+### Theme 10: Other Factors
+
+**Definition:** Responses that do not fit into any of the defined categories but still influence children's school attendance or learning. It captures unique, context-specific, or less common reasons mentioned by respondents that contribute to educational challenges.
+
+**Examples:**
+- Parents in the community lack awareness about the importance of education
+- Family migration for work causes problems for children
+- Parents in villages prefer private schools over government schools
+- An 18-year-old girl in the seventh class feels shy and does not attend school due to being older and larger than her classmates, fearing ridicule
+
+---
+
+### Theme 11: Unknown/Unclear
+
+**Definition:** Statements that are incomplete, unclear, or insufficient. Use only when the challenge cannot be reasonably classified into any other category.
+
+---
 
 ## PII Detection Guidelines
 
-Flag as PII if the challenge contains:
-- **Names** of individuals (students, parents, teachers, community members)
-- **Specific ages** when combined with identifying details
-- **Specific addresses** or identifiable location details beyond general village/community references
-- **Phone numbers, email addresses, ID numbers**
-- **Photographs or physical descriptions** that could identify individuals
-- **Specific family details** that could identify individuals (e.g., "Ram's daughter who lives near the temple")
-- **Specific school names** when combined with individual identifiers
+### Flag as `true` if the text contains:
 
-Do NOT flag as PII:
-- General demographic information (e.g., "girls," "teenage girls," "children")
-- General location references (e.g., "village," "community," "Muslim community")
-- General role descriptions (e.g., "parents," "teachers," "father")
-- Age ranges or general age categories without specific identifiers
+- Personal names (students, teachers, parents, community members)
+- Specific addresses, house numbers, or exact locations
+- Phone numbers, email addresses, or identification numbers
+- Specific ages combined with identifying details
+- Any information that could identify an individual
+
+### Flag as `false` if the text only contains:
+
+- General locations (village names, district names without specific addresses)
+- General demographic information (community, caste, gender without names)
+- Age groups or grade levels without identifying details
+
+---
+
+## Task Instructions
+
+For each challenge statement provided:
+
+1. **Read carefully** to understand the core barrier being described
+2. **Classify** into the most appropriate theme (1-6)
+3. **Check for PII** using the guidelines above
+4. **Output** in the specified JSON format
+
+## Output Format
+
+Return ONLY a valid JSON object with this structure (no additional text, markdown, or explanations):
+
+{
+  "classified_data": [
+    {
+      "theme_id": 1,
+      "theme_name": "Poverty and Economic Barriers",
+      "pii_flag": false
+    }
+  ]
+}
 
 ## Classification Rules
 
 - Assign ONE primary theme per challenge (the most dominant barrier)
 - If a challenge mentions multiple barriers, classify by the PRIMARY/MAIN issue
-- Use theme 7 (Unknown/Unclear) ONLY when the statement is genuinely incomplete or incomprehensible
 - Be consistent in classification across similar statements
 - When in doubt between two themes, choose the one most directly preventing school attendance
 
+## Examples
+
+**Input Challenge:** "Due to economic constraints, families force girls to engage in domestic work"
+**Output:** `{"theme_id": 1, "theme_name": "Poverty and Economic Barriers", "pii_flag": false}`
+
+**Input Challenge:** "Raj Kumar's daughter from ward 3 cannot go to school due to lack of Aadhaar"
+**Output:** `{"theme_id": 2, "theme_name": "Legal Document-linked Barriers", "pii_flag": true}`
+
+**Input Challenge:** "The school is very far from the village and roads are in poor condition"
+**Output:** `{"theme_id": 4, "theme_name": "Distance and Accessibility Issues", "pii_flag": false}`
+
 ---
-**Your Task:** Analyze the challenges below and provide the classification strictly in the JSON format defined by the schema.
+
+**Now classify the following challenges:**
+
 """
-
-# --- API Key Configuration (LOAD FROM ENVIRONMENT VARIABLES RECOMMENDED) ---
-# NOTE: Using a placeholder key for demonstration.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY") 
-CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "YOUR_CLAUDE_API_KEY")
-
-# WARNING: Hardcoding the key here is a security risk. Use os.environ.get() in production.
-CHATGPT_API_KEY = os.environ.get("OPENAI_API_KEY", "YOUR_CHATGPT_API_KEY") 
-
-
-# Fallback/Default for Gemini (if environment not set)
-if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY":
-    try:
-        # Assuming a custom file to load key
-        from .process_evidence import GEMINI_TOKENS 
-        GEMINI_API_KEY = GEMINI_TOKENS[0]
-    except:
-        pass
-
-
-# --- Define the desired output schema (TypedDict for validation) ---
-class ChallengeClassification(typing.TypedDict):
-    theme_id: int
-    theme_name: str
-    pii_flag: bool
-
-class AnalysisResponse(typing.TypedDict):
-    classified_data: List[ChallengeClassification]
 
 
 def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[str, Any]:
     """
     Analyzes a list of challenges using the selected AI model and classification prompt.
-    (This function remains unchanged as it only handles text analysis)
     """
     
     # 1. Prepare the Challenge List
@@ -134,37 +275,58 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
         return {"error": "No valid challenge statements provided."}
 
     challenges_for_prompt = "\n".join([f"- {c}" for c in challenge_list])
-    full_prompt = CLASSIFICATION_PROMPT + "\n\n## Challenges to Classify\n" + challenges_for_prompt
+    full_prompt = CLASSIFICATION_PROMPT + "\n" + challenges_for_prompt
     
     response_json: Optional[Dict] = None
     model_name: str = ""
 
-    # 2. Model Routing and Configuration (Logic remains the same)
+    # 2. Model Routing and Configuration
     if "Gemini" in model_choice:
         model_name = "gemini-2.5-flash"
-        if GEMINI_API_KEY in ["YOUR_GEMINI_API_KEY", None]:
-            return {"error": "Gemini API key is not configured."}
+        if not GEMINI_API_KEY:
+            return {"error": "Gemini API key is not configured in .env."}
             
         try:
             genai.configure(api_key=GEMINI_API_KEY)
+            
+            # Use simpler generation config without schema enforcement
+            # Gemini will follow the prompt instructions for JSON format
             client_model = genai.GenerativeModel(
                 model_name=model_name,
                 generation_config={
-                    "response_mime_type": "application/json",
-                    "response_schema": AnalysisResponse,
-                    "temperature": 0.0
-                },
+                    "temperature": 0.1,
+                    "response_mime_type": "application/json"
+                }
             )
+            
             response = client_model.generate_content(contents=[full_prompt])
-            response_json = json.loads(response.text)
+            
+            # Parse and validate the response
+            response_text = response.text.strip()
+            
+            # Remove markdown code blocks if present
+            if response_text.startswith("```"):
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+            
+            response_json = json.loads(response_text)
+            
+            # Validate structure
+            if "classified_data" not in response_json:
+                return {"error": "Invalid response structure: missing 'classified_data' field"}
+                
+        except json.JSONDecodeError as e:
+            return {"error": f"Failed to parse Gemini JSON response: {e}. Response: {response.text[:200]}"}
         except Exception as e:
             return {"error": f"Gemini API call failed: {e}"}
 
     elif "ChatGPT" in model_choice:
         if OpenAI is None:
             return {"error": "OpenAI library not found. Please run 'pip install openai'."}
-        if CHATGPT_API_KEY in ["YOUR_CHATGPT_API_KEY", None]: 
-            return {"error": "ChatGPT API key is missing or is the default placeholder."}
+        if not CHATGPT_API_KEY: 
+            return {"error": "ChatGPT API key is missing in .env."}
 
         model_name = "gpt-4o-mini"
         try:
@@ -173,8 +335,8 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
             response = client.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": CLASSIFICATION_PROMPT},
-                    {"role": "user", "content": "\n\n## Challenges to Classify\n" + challenges_for_prompt}
+                    {"role": "system", "content": "You are an expert educational data classifier. Always respond with valid JSON only."},
+                    {"role": "user", "content": full_prompt}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.0
@@ -189,10 +351,10 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
     elif "Claude" in model_choice:
         if Anthropic is None:
             return {"error": "Anthropic library not found. Please run 'pip install anthropic'."}
-        if CLAUDE_API_KEY in ["YOUR_CLAUDE_API_KEY", None]:
-            return {"error": "Claude API key is not configured."}
+        if not CLAUDE_API_KEY:
+            return {"error": "Claude API key is not configured in .env."}
 
-        model_name = "claude-3-haiku-20240307"
+        model_name = "claude-3-5-sonnet-20241022"
         try:
             client = Anthropic(api_key=CLAUDE_API_KEY)
             
@@ -201,12 +363,22 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
                 messages=[
                     {"role": "user", "content": full_prompt}
                 ],
-                max_tokens=2048,
-                temperature=0.0,
-                response_schema=AnalysisResponse,
+                max_tokens=4096,
+                temperature=0.0
             )
             if response.content and response.content[0].text:
-                response_json = json.loads(response.content[0].text)
+                # Basic JSON extraction
+                try:
+                    response_json = json.loads(response.content[0].text)
+                except json.JSONDecodeError:
+                    # Fallback cleanup - find JSON object
+                    text = response.content[0].text
+                    start = text.find('{')
+                    end = text.rfind('}') + 1
+                    if start != -1 and end > start:
+                        response_json = json.loads(text[start:end])
+                    else:
+                        raise ValueError("Could not extract JSON from Claude response")
             else:
                 raise ValueError("No content received from Claude API.")
         except Exception as e:
@@ -215,11 +387,22 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
     else:
         return {"error": f"Unknown model choice: {model_choice}"}
 
-    # 3. Final Processing
+    # 3. Final Processing and Validation
     if response_json:
         classified_data = response_json.get("classified_data", [])
+        
+        # Trim to match input count
         if len(classified_data) > len(challenge_list):
-             classified_data = classified_data[:len(challenge_list)]
+            classified_data = classified_data[:len(challenge_list)]
+        
+        # Validate each classification entry
+        for i, item in enumerate(classified_data):
+            if not isinstance(item.get("theme_id"), int):
+                classified_data[i]["theme_id"] = 0
+            if not isinstance(item.get("theme_name"), str):
+                classified_data[i]["theme_name"] = "Unknown"
+            if not isinstance(item.get("pii_flag"), bool):
+                classified_data[i]["pii_flag"] = False
         
         return {
             "source": model_name,
@@ -227,286 +410,3 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
         }
     
     return {"error": "Failed to receive or parse a valid JSON response from the model."}
-
-
-# --- Story Rating Schema (Updated to include document_language) ---
-class StoryRating(typing.TypedDict):
-    document_language: str
-    impact_and_outcome_score: float
-    impact_justification: str
-    issue_and_challenge_score: float
-    issue_justification: str
-    action_steps_score: float
-    action_justification: str
-    composite_score: float
-    tier: typing.Literal["Excellent", "Good", "Developing", "Needs Improvement"]
-    overall_summary: str
-
-# --- Story Rating Prompt (Unchanged as it relies on content passed to it) ---
-STORY_RATING_PROMPT = """
-You are an expert story evaluator specializing in assessing educational and social impact narratives. Your task is to analyze the attached story (from a PDF) and rank it based on three critical criteria: Impact/Outcome, Issue/Challenge clarity, and Action Steps taken.
-
-## Evaluation Criteria
-
-### Criterion 1: Impact and Outcome Score (0.0 - 1.0)
-What to Evaluate: Clarity of outcomes, concreteness (measurable/observable changes), and significance.
-
-### Criterion 2: Issue and Challenge Score (0.0 - 1.0)
-What to Evaluate: Problem clarity, root cause identification, and sufficient context.
-
-### Criterion 3: Action Steps Score (0.0 - 1.0)
-What to Evaluate: Specificity, sequential flow, completeness (planning, execution, adaptation), and problem-solving (obstacles and solutions).
-
-## Composite Score and Tier Assignment
-- Calculate the `composite_score` using the weighted average:
-  **Composite Score = (Impact × 0.4) + (Issue × 0.3) + (Action × 0.3)**
-
-- Assign the `tier` based on individual scores:
-    - **Excellent:** All three scores ≥ 0.75
-    - **Good:** All three scores ≥ 0.60
-    - **Developing:** All three scores ≥ 0.40
-    - **Needs Improvement:** Any score < 0.40
-
-## Task Instructions
-1. Analyze the complete text content provided under 'Extracted PDF Content', which may include a fallback text input from the user.
-2. Identify the primary language of the story content and include it as `document_language`.
-3. Provide a score and detailed justification for each of the three criteria based on the scoring guidelines provided in your system instructions.
-4. Calculate the composite score and assign the correct tier.
-5. Provide a brief, actionable `overall_summary`.
-6. Return the result strictly as a single JSON object matching the provided schema, with all text fields in English.
-
-## Story Details (from PDF and Image)
-
-**Title:** {story_title}
-**Image Context:** {image_context}
-
----
-**Extracted PDF Content (TEXT FOR EVALUATION):**
-{pdf_content}
-"""
-
-def process_pdf_and_extract_text(pdf_url: str) -> Dict[str, Union[str, None]]:
-    """
-    Downloads a PDF, extracts all text, and attempts to detect the language.
-    Requires 'PyMuPDF' (fitz).
-    """
-    if not PDF_PROCESSOR_AVAILABLE:
-        return {"error": "PDF processing library (PyMuPDF/fitz) not found. Please run 'pip install PyMuPDF'."}
-
-    try:
-        # 1. Download the PDF content
-        print(f"Downloading PDF from: {pdf_url}")
-        response = httpx.get(pdf_url, follow_redirects=True, timeout=30)
-        response.raise_for_status()
-        pdf_bytes = response.content
-
-        # 2. Extract text using PyMuPDF (fitz)
-        document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        text_content = ""
-        for page_num in range(document.page_count):
-            page = document.load_page(page_num)
-            text_content += page.get_text() + "\n\n"
-        
-        document.close()
-        text_content = text_content.strip()
-
-        if not text_content:
-            return {"text": "", "error": "PDF contains no readable text content."}
-        
-        return {
-            "text": text_content,
-            "language_hint": "Unknown" # Actual language detection by LLM
-        }
-    except httpx.HTTPStatusError as e:
-        return {"error": f"HTTP error downloading PDF: {e.response.status_code}"}
-    except Exception as e:
-        return {"error": f"PDF processing error: {e}"}
-
-def get_image_as_base64_content(url: str) -> Optional[Dict[str, str]]:
-    """Fetches image from URL and returns content dict for Gemini/OpenAI."""
-    # (Unchanged)
-    if not url.strip():
-        return None
-    try:
-        response = httpx.get(url, timeout=10)
-        response.raise_for_status()
-        
-        base64_encoded = base64.b64encode(response.content).decode("utf-8")
-        content_type = response.headers.get("Content-Type", "image/jpeg") 
-        
-        return {
-            "mime_type": content_type,
-            "data": base64_encoded,
-        }
-    except Exception as e:
-        print(f"Error fetching image for story Ranker: {e}")
-        return None
-
-
-def analyze_story_rating(title: str, pdf_url: str, image_url: str, model_choice: str, optional_content: str = "") -> Dict[str, Any]:
-    """
-    Analyzes a story of change with mandatory PDF and Title. The optional_content is used 
-    to enrich the prompt, especially if PDF extraction fails.
-    
-    *MODIFIED TO ACCEPT optional_content*
-    """
-    if not title:
-        return {"error": "Title is mandatory for story analysis."}
-    if not pdf_url:
-        return {"error": "PDF link is mandatory for story analysis."}
-    
-    # 1. Process PDF
-    pdf_result = process_pdf_and_extract_text(pdf_url)
-    
-    # Determine the content to send to the model
-    content_for_ai = ""
-    if "error" in pdf_result:
-        # PDF extraction failed or file was empty. Use optional content as fallback.
-        print(f"PDF processing failed: {pdf_result['error']}. Using optional content if provided.")
-        if optional_content.strip():
-             content_for_ai = f"[PDF ERROR: {pdf_result['error']}] --- FALLBACK TEXT CONTENT PROVIDED BY USER: \n\n{optional_content.strip()}"
-        else:
-             return pdf_result # No PDF content, no optional content, so we return the error
-    else:
-        # PDF content is primary. Append optional content for extra context if it exists.
-        pdf_content = pdf_result['text']
-        content_for_ai = pdf_content
-        if optional_content.strip():
-            content_for_ai += f"\n\n--- SUPPLEMENTAL TEXT CONTENT PROVIDED BY USER (Use this for context): ---\n{optional_content.strip()}"
-
-
-    # 2. Process Image
-    image_content = get_image_as_base64_content(image_url)
-    
-    # 3. Prepare Prompt and Image Context
-    if image_content:
-        image_context = "The image provided is field evidence related to this story. Use it to check for visual consistency and context (e.g., do the photos show the 'action steps' described?)."
-    else:
-        image_context = "NO IMAGE PROVIDED. Please rely solely on the text content."
-
-    # Format the prompt
-    full_prompt = STORY_RATING_PROMPT.format(
-        story_title=title,
-        pdf_content=content_for_ai, # Use the combined/fallback content here
-        image_context=image_context
-    )
-    
-    response_json: Optional[Dict] = None
-    model_name: str = ""
-
-    # 4. Model Routing and Configuration (Multi-modal setup with image)
-
-    if "Gemini" in model_choice:
-        model_name = "gemini-2.5-flash"
-        if GEMINI_API_KEY in ["YOUR_GEMINI_API_KEY", None]:
-            return {"error": "Gemini API key is not configured."}
-        
-        contents: List[Any] = [full_prompt]
-        if image_content:
-            contents.insert(0, image_content)
-        
-        try:
-            genai.configure(api_key=GEMINI_API_KEY)
-            client_model = genai.GenerativeModel(
-                model_name=model_name,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "response_schema": StoryRating,
-                    "temperature": 0.0
-                },
-            )
-            response = client_model.generate_content(contents=contents)
-            response_json = json.loads(response.text)
-        except Exception as e:
-            return {"error": f"Gemini API call failed: {e}"}
-
-    elif "ChatGPT" in model_choice:
-        if OpenAI is None:
-            return {"error": "OpenAI library not found. Please run 'pip install openai'."}
-        if CHATGPT_API_KEY in ["YOUR_CHATGPT_API_KEY", None]:
-            return {"error": "ChatGPT API key is missing or is the default placeholder."}
-
-        model_name = "gpt-4o"
-        try:
-            client = OpenAI(api_key=CHATGPT_API_KEY)
-
-            message_content: List[Dict[str, Any]] = []
-            
-            if image_content:
-                message_content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{image_content['mime_type']};base64,{image_content['data']}"
-                    }
-                })
-
-            message_content.append({"type": "text", "text": full_prompt})
-            
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "user", "content": message_content}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.0
-            )
-            if response.choices and response.choices[0].message.content:
-                response_json = json.loads(response.choices[0].message.content)
-            else:
-                raise ValueError("No content received from OpenAI API.")
-        except Exception as e:
-            return {"error": f"ChatGPT API call failed: {e}"}
-
-    elif "Claude" in model_choice:
-        if Anthropic is None:
-            return {"error": "Anthropic library not found. Please run 'pip install anthropic'."}
-        if CLAUDE_API_KEY in ["YOUR_CLAUDE_API_KEY", None]:
-            return {"error": "Claude API key is not configured."}
-
-        model_name = "claude-3-sonnet-20240229"
-        try:
-            client = Anthropic(api_key=CLAUDE_API_KEY)
-
-            claude_content: List[Dict[str, Any]] = []
-            
-            if image_content:
-                claude_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": image_content['mime_type'],
-                        "data": image_content['data'],
-                    },
-                })
-            
-            claude_content.append({"type": "text", "text": full_prompt})
-            
-            response = client.messages.create(
-                model=model_name,
-                messages=[
-                    {"role": "user", "content": claude_content}
-                ],
-                max_tokens=4096,
-                temperature=0.0,
-                response_schema=StoryRating
-            )
-            if response.content and response.content[0].text:
-                response_json = json.loads(response.content[0].text)
-            else:
-                raise ValueError("No content received from Claude API.")
-        except Exception as e:
-            return {"error": f"Claude API call failed: {e}"}
-
-    else:
-        return {"error": f"Unknown model choice: {model_choice}"}
-
-    # 5. Final Processing
-    if response_json and "composite_score" in response_json:
-        return {
-            "source": model_name,
-            **response_json
-        }
-    
-    return {"error": "Failed to receive or parse a valid JSON response from the model."}
-
-# End of ai/thematic_processor.py

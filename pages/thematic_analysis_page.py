@@ -1,5 +1,4 @@
 import streamlit as st
-# Assuming ai/thematic_processor.py exists and contains the classification function
 from ai.thematic_processor import analyze_thematic_challenge 
 import json
 
@@ -12,19 +11,21 @@ def show():
 
     st.markdown("### 🎙️ SG Voice: Thematic Analysis")
     st.markdown("---")
-    st.markdown("Classify raw text challenges based on educational barriers and detect PII (Personal Identifiable Information).")
-
+    st.markdown(
+    """Classify raw text challenges into pre-defined themes and detect PII (Personal Identifiable Information).  
+    <span style="color:#1E90FF;"><b>Input: From Chaupal/Chavadi csv choose Challenges column</b></span>
+    """,unsafe_allow_html=True
+    )
+    
     # Define layout columns
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        # --- Input Text Area (Modified Placeholder) ---
-        st.markdown("**Enter Challenges Text**")
+        st.markdown("**Enter Challenges**")
         input_text = st.text_area(
             "Paste a list of educational challenge statements (separated by the pipe '|' character).",
             key="thematic_input_text",
             height=300,
-            # --- MODIFIED PLACEHOLDER ---
             placeholder="e.g., Due to poor financial condition, the girl is not able to study | Raj Kumar's daughter from ward 3 cannot go to school due to lack of Aadhaar | School infrastructure is poor",
             label_visibility="collapsed"
         )
@@ -46,7 +47,6 @@ def show():
                 if not input_text.strip():
                     st.warning("Please enter challenge statements to analyze.")
                 else:
-                    # --- MODIFIED INPUT PROCESSING ---
                     # Split input text by '|' and strip whitespace
                     challenges = [c.strip() for c in input_text.split('|') if c.strip()]
                     
@@ -138,3 +138,5 @@ def show():
                 "PII Detected": st.column_config.Column("PII Detected", width="small")
             }
         )
+
+

@@ -1,15 +1,15 @@
 import streamlit as st
 from utils.auth import check_credentials
-import evidence_analysis_page
-import thematic_analysis_page
-import story_rating_page
+import pages.evidence_analysis_page as evidence_analysis_page
+import pages.thematic_analysis_page as thematic_analysis_page
+import pages.story_rating_page as story_rating_page
 import streamlit.components.v1 as components
 
 # --- CONSTANTS FOR NAVIGATION ---
-PAGE_EVIDENCE_ANALYSIS = "Evidence Analysis"
 PAGE_THEMATIC_ANALYSIS = "Thematic Analysis"
 PAGE_STORY_RATING = "Story Ranker"
-NAVIGATABLE_PAGES = [PAGE_EVIDENCE_ANALYSIS, PAGE_THEMATIC_ANALYSIS, PAGE_STORY_RATING]
+PAGE_EVIDENCE_ANALYSIS = "Evidence Analysis"
+NAVIGATABLE_PAGES = [PAGE_THEMATIC_ANALYSIS, PAGE_STORY_RATING, PAGE_EVIDENCE_ANALYSIS]
 
 # Set page configuration (Must be the first Streamlit command)
 st.set_page_config(page_title="Evidence Validator", layout="wide", initial_sidebar_state="collapsed")
@@ -22,7 +22,7 @@ if "show_reports" not in st.session_state:
     st.session_state["show_reports"] = False
 
 if "current_page" not in st.session_state:
-    st.session_state["current_page"] = PAGE_EVIDENCE_ANALYSIS
+    st.session_state["current_page"] = PAGE_THEMATIC_ANALYSIS
 
 def login():
     """Displays the login form."""
@@ -101,11 +101,9 @@ else:
         with nav_col1:
             # Dropdown Navigation/SG Voice Menu
             page_select_options = [
-                PAGE_EVIDENCE_ANALYSIS, 
                 PAGE_THEMATIC_ANALYSIS, 
                 PAGE_STORY_RATING,
-                "Action Step (Coming Soon)",
-                "Extract Data (Coming Soon)",
+                PAGE_EVIDENCE_ANALYSIS
             ]
             
             # Find current page index for default selection
