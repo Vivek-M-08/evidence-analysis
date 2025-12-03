@@ -1,2 +1,2 @@
 def check_credentials(username: str, password: str) -> bool:
-    return username == "admin" and password == "admin"
+    return username == "user" and password == "user"

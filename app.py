@@ -14,6 +14,15 @@ NAVIGATABLE_PAGES = [PAGE_THEMATIC_ANALYSIS, PAGE_STORY_RATING, PAGE_EVIDENCE_AN
 # Set page configuration (Must be the first Streamlit command)
 st.set_page_config(page_title="Evidence Validator", layout="wide", initial_sidebar_state="collapsed")
 
+# Hide Streamlit default hamburger menu and footer
+st.markdown("""
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;} /* optional: hides Streamlit header */
+    </style>
+""", unsafe_allow_html=True)
+
 # --- INITIALIZE SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
