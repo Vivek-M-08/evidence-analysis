@@ -7,3 +7,4 @@ httpx
 requests
 typing_extensions
 PyMuPDF
+python-dotenv
