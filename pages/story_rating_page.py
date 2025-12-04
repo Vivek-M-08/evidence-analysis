@@ -44,7 +44,7 @@ def show():
         st.markdown("<br><br>", unsafe_allow_html=True) 
         model_choice = st.selectbox(
             "Select AI Model:",
-            ["Gemini-2.5-Flash", "ChatGPT-4o", "Claude-3-Sonnet"], 
+            ["Gemini-2.5-Flash", "ChatGPT-4o-Mini", "Claude-4.5-Sonnet"], 
             key="story_model_choice"
         )
         

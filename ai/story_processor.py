@@ -5,21 +5,12 @@ import os
 import httpx
 import base64
 from typing import List, Dict, Any, Optional, Union
+from openai import OpenAI
 from dotenv import load_dotenv
+import boto3
 
 # Load env variables
 load_dotenv()
-
-# --- External API Imports ---
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
-try:
-    from anthropic import Anthropic
-except ImportError:
-    Anthropic = None
 
 try:
     import fitz # PyMuPDF
@@ -39,6 +30,13 @@ GEMINI_API_KEY = gemini_keys[0] if gemini_keys else None
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CHATGPT_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# AWS bedrocks configuration
+claude_beadrock_client = boto3.client(
+    "bedrock-runtime",
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
 
 # --- Story Rating Schema ---
 class StoryRating(typing.TypedDict):
@@ -263,47 +261,6 @@ def validate_response(response_json: Dict) -> Dict[str, Any]:
         "overall_summary"
     ]
     
-    missing_fields = [field for field in required_fields if field not in response_json]
-    
-    # Auto-fill missing fields with reasonable defaults
-    if missing_fields:
-        print(f"[WARNING] Missing fields detected: {', '.join(missing_fields)}. Attempting auto-fill...")
-        
-        # If action_steps_score is missing, estimate it from other scores
-        if "action_steps_score" not in response_json:
-            if "impact_and_outcome_score" in response_json and "issue_and_challenge_score" in response_json:
-                # Use average of other two scores as estimate
-                avg = (float(response_json["impact_and_outcome_score"]) + 
-                       float(response_json["issue_and_challenge_score"])) / 2
-                response_json["action_steps_score"] = round(avg, 2)
-                print(f"[AUTO-FILL] action_steps_score = {response_json['action_steps_score']} (estimated from other scores)")
-        
-        # If action_justification is missing, add a generic note
-        if "action_justification" not in response_json:
-            response_json["action_justification"] = "Action steps were present in the narrative, showing evidence of systematic intervention and problem-solving approach."
-            print(f"[AUTO-FILL] action_justification added with generic text")
-        
-        # If composite_score is missing, calculate it
-        if "composite_score" not in response_json:
-            if all(k in response_json for k in ["impact_and_outcome_score", "issue_and_challenge_score", "action_steps_score"]):
-                impact = float(response_json["impact_and_outcome_score"])
-                issue = float(response_json["issue_and_challenge_score"])
-                action = float(response_json["action_steps_score"])
-                response_json["composite_score"] = round((impact * 0.4) + (issue * 0.3) + (action * 0.3), 2)
-                print(f"[AUTO-FILL] composite_score = {response_json['composite_score']} (calculated)")
-        
-        # Check if we still have missing critical fields
-        still_missing = [field for field in required_fields if field not in response_json]
-        if still_missing:
-            return {
-                "error": f"Unable to auto-fill critical fields: {', '.join(still_missing)}",
-                "partial_response": response_json
-            }
-        
-        # Add a note that auto-fill was used
-        response_json["_auto_filled"] = True
-        response_json["_auto_filled_fields"] = missing_fields
-    
     # Validate score ranges
     score_fields = ["impact_and_outcome_score", "issue_and_challenge_score", "action_steps_score", "composite_score"]
     for field in score_fields:
@@ -417,27 +374,35 @@ def analyze_story_rating(title: str, pdf_url: str, image_url: str, model_choice:
             return {"error": f"ChatGPT API call failed: {e}"}
 
     elif "Claude" in model_choice:
-        if Anthropic is None:
-            return {"error": "Anthropic library not found. Please run 'pip install anthropic'."}
-        if not CLAUDE_API_KEY:
-            return {"error": "Claude API key is not configured in .env."}
-
-        model_name = "claude-3-sonnet-20240229"
+        anthropic_version = "bedrock-2023-05-31"
+        model_id = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        claude_max_tokens = 4000
         try:
-            client = Anthropic(api_key=CLAUDE_API_KEY)
+            body = {
+                "anthropic_version": anthropic_version,
+                "max_tokens": claude_max_tokens,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": full_prompt
+                    }
+                ]
+            }
 
-            # ONLY send text prompt, NO images
-            response = client.messages.create(
-                model=model_name,
-                messages=[
-                    {"role": "user", "content": full_prompt}
-                ],
-                max_tokens=4096,
-                temperature=0.0,
+            response = claude_beadrock_client.invoke_model(
+                modelId=model_id,
+                body=json.dumps(body)
             )
-            if response.content and response.content[0].text:
-                raw_response_text = response.content[0].text
-                print(f"[DEBUG] Claude raw response: {raw_response_text[:500]}...")
+
+            # Read the streaming body FIRST
+            response_body = json.loads(response['body'].read())
+            
+            print("Claude response body:", response_body)  # Debug print AFTER reading
+
+            # Extract text from the response
+            if 'content' in response_body and len(response_body['content']) > 0:
+                text_content = response_body['content'][0]['text']
+                raw_response_text = text_content
                 response_json = extract_json_from_text(raw_response_text)
             else:
                 raise ValueError("No content received from Claude API.")

@@ -4,20 +4,10 @@ import json
 import os
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
+import boto3
 
 # Load env variables
 load_dotenv()
-
-# --- External API Imports ---
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
-try:
-    from anthropic import Anthropic
-except ImportError:
-    Anthropic = None
 
 # --- API Key Configuration ---
 # Get Gemini keys and pick the first one for default usage
@@ -27,6 +17,14 @@ GEMINI_API_KEY = gemini_keys[0] if gemini_keys else None
 
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CHATGPT_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# AWS bedrocks configuration
+claude_beadrock_client = boto3.client(
+    "bedrock-runtime",
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+)
 
 # --- PII and Classification Theme Data ---
 
@@ -349,34 +347,44 @@ def analyze_thematic_challenge(challenges_text: str, model_choice: str) -> Dict[
             return {"error": f"ChatGPT API call failed: {e}"}
     
     elif "Claude" in model_choice:
-        if Anthropic is None:
-            return {"error": "Anthropic library not found. Please run 'pip install anthropic'."}
-        if not CLAUDE_API_KEY:
-            return {"error": "Claude API key is not configured in .env."}
-
-        model_name = "claude-3-5-sonnet-20241022"
+        anthropic_version = "bedrock-2023-05-31"
+        model_id = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        claude_max_tokens = 4000
         try:
-            client = Anthropic(api_key=CLAUDE_API_KEY)
-            
-            response = client.messages.create(
-                model=model_name,
-                messages=[
-                    {"role": "user", "content": full_prompt}
-                ],
-                max_tokens=4096,
-                temperature=0.0
+            body = {
+                "anthropic_version": anthropic_version,
+                "max_tokens": claude_max_tokens,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": full_prompt
+                    }
+                ]
+            }
+
+            response = claude_beadrock_client.invoke_model(
+                modelId=model_id,
+                body=json.dumps(body)
             )
-            if response.content and response.content[0].text:
+
+            # Read the streaming body
+            response_body = json.loads(response['body'].read())
+            
+            print("Claude response body:", response_body)  # Debug print
+
+            # Extract text from the response
+            if 'content' in response_body and len(response_body['content']) > 0:
+                text_content = response_body['content'][0]['text']
+                
                 # Basic JSON extraction
                 try:
-                    response_json = json.loads(response.content[0].text)
+                    response_json = json.loads(text_content)
                 except json.JSONDecodeError:
                     # Fallback cleanup - find JSON object
-                    text = response.content[0].text
-                    start = text.find('{')
-                    end = text.rfind('}') + 1
+                    start = text_content.find('{')
+                    end = text_content.rfind('}') + 1
                     if start != -1 and end > start:
-                        response_json = json.loads(text[start:end])
+                        response_json = json.loads(text_content[start:end])
                     else:
                         raise ValueError("Could not extract JSON from Claude response")
             else:

@@ -37,7 +37,7 @@ def show():
         with btn_col1:
             model_choice = st.selectbox(
                 "Select AI Model:",
-                ["Gemini-2.5-Flash", "ChatGPT-4o-Mini", "Claude-3.5-Sonnet"],
+                ["Gemini-2.5-Flash", "ChatGPT-4o-Mini", "Claude-4.5-Sonnet"],
                 key="thematic_model_choice"
             )
 

@@ -8,3 +8,4 @@ requests
 typing_extensions
 PyMuPDF
 python-dotenv
+boto3
