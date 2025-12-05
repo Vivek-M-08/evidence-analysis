@@ -33,7 +33,7 @@ def show():
 
         prompt_file = Path(__file__).parent.parent / "prompts" / "thematic_clasification_prompt.txt"
         default_prompt = prompt_file.read_text() if prompt_file.exists() else ""
-        context_prompt = st.text_area("4. Prompt (Editable)", value=default_prompt, key="story_prompt_input", height=150)            
+        context_prompt = st.text_area("4. Prompt (Editable)", value=default_prompt, key="thematic_prompt_input", height=150)            
     
         # --- AI Model Selection and Analysis Button ---
         st.markdown("<br>", unsafe_allow_html=True)
