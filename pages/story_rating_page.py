@@ -1,7 +1,47 @@
 import streamlit as st
-# Importing the REQUIRED function from the processor file
 from ai.story_processor import analyze_story_rating 
 import json
+import subprocess
+import os
+import requests
+from pathlib import Path
+
+def download_image(image_url, save_path):
+    """Download image from URL"""
+    response = requests.get(image_url, timeout=30)
+    response.raise_for_status()
+    with open(save_path, 'wb') as f:
+        f.write(response.content)
+    return save_path
+
+def blur_faces(input_file, output_file):
+    """Blur all faces in an image"""
+    cmd = ['deface', input_file, '--output', output_file]
+    subprocess.run(cmd, check=True)
+    return output_file
+
+def process_image_with_blur(image_url, img_index):
+    """Download and blur faces in an image"""
+    try:
+        # Create temp directory if needed
+        temp_dir = Path("temp_images")
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Download image
+        input_path = temp_dir / f"input_{img_index}.jpg"
+        output_path = temp_dir / f"blurred_{img_index}.jpg"
+        
+        download_image(image_url, str(input_path))
+        blur_faces(str(input_path), str(output_path))
+        
+        # Clean up input file
+        if input_path.exists():
+            input_path.unlink()
+        
+        return str(output_path)
+    except Exception as e:
+        print(f"Error processing image {img_index}: {e}")
+        return None
 
 def show():
     # Set initial state for analysis completion and image rendering
@@ -31,14 +71,15 @@ def show():
         pdf_url = st.text_input("2. PDF Link (URL)", key="story_pdf_input",
                                 placeholder="e.g., https://example.com/story_document.pdf")
 
-        # 3. Image Links (Optional for AI, but stored for rendering)
-        image_url_input = st.text_area("3. Image Links from Images column - Optional", key="story_image_input", 
+        # 3. Image Links (Optional for blur and rendered)
+        image_url_input = st.text_area("3. Image Links to blur faces - Optional", key="story_image_input", 
                                   height=70,
                                   placeholder="e.g., link1.jpg | link2.png | link3.jpeg")
         
-        # 4. Story Content (Re-added as Optional)
-        content = st.text_area("4. Content - Optional", key="story_content_input", height=150, 
-                               placeholder="Enter any additional or corrected text content here. This supplements the PDF extraction.")
+        # 4. Prompt (Editable)
+        prompt_file = Path(__file__).parent.parent / "prompts" / "story_rating_prompt.txt"
+        default_prompt = prompt_file.read_text() if prompt_file.exists() else ""
+        context_prompt = st.text_area("4. Prompt (Editable)", value=default_prompt, key="story_prompt_input", height=150)            
     
     with col_model:
         st.markdown("<br><br>", unsafe_allow_html=True) 
@@ -54,16 +95,15 @@ def show():
             else:
                 # Process the multiple image links
                 all_image_urls = [url.strip() for url in image_url_input.split('|') if url.strip()]
-                primary_image_for_ai = all_image_urls[0] if all_image_urls else ""
+                image_urls = all_image_urls[0] if all_image_urls else ""
 
                 # Clear previous state
                 st.session_state["story_analysed"] = False
                 st.session_state["story_result"] = None
                 st.session_state["story_image_urls"] = all_image_urls 
 
-                # Call the processor function, passing the optional 'content'
                 with st.spinner(f"Downloading PDF, extracting text, and rating story using {model_choice}..."):
-                    result = analyze_story_rating(title, pdf_url, primary_image_for_ai, model_choice, content)
+                    result = analyze_story_rating(title, pdf_url, model_choice, context_prompt)
                     st.session_state["story_result"] = result
                     st.session_state["story_analysed"] = True
                     st.rerun()
@@ -141,9 +181,18 @@ def show():
                                 url = image_urls[img_index]
                                 with row_cols[col_index]:
                                     try:
-                                        st.image(url, 
-                                                 caption=f"Image {img_index + 1}", 
-                                                 use_container_width=True)
+                                        # Process image with face blurring
+                                        blurred_path = process_image_with_blur(url, img_index)
+                                        
+                                        if blurred_path and os.path.exists(blurred_path):
+                                            st.image(blurred_path, 
+                                                    caption=f"Image {img_index + 1} (Faces Blurred)", 
+                                                    use_container_width=True)
+                                        else:
+                                            # Fallback to original if blurring fails
+                                            st.image(url, 
+                                                    caption=f"Image {img_index + 1}", 
+                                                    use_container_width=True)
                                     except Exception as e:
                                         failed_images.append((url, str(e)))
                                         st.warning(f"Image {img_index + 1} failed to load.", icon="⚠️")

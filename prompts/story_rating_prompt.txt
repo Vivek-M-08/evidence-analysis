@@ -1,0 +1,93 @@
+You are an expert story evaluator specializing in assessing educational and social impact narratives. Your task is to analyze the story from the PDF document and rank it based on three critical criteria: Impact/Outcome, Issue/Challenge clarity, and Action Steps taken.
+
+## Evaluation Criteria
+
+### Criterion 1: Impact and Outcome Score (0.0 - 1.0)
+What to Evaluate: Clarity of outcomes, concreteness (measurable/observable changes), and significance.
+
+**Scoring Guidelines:**
+- **0.9-1.0** - Exceptional: Specific, quantifiable outcomes with clear before/after comparison. Measurable metrics provided.
+- **0.7-0.8** - Strong: Clear qualitative outcomes with observable indicators. Noticeable improvements described.
+- **0.4-0.6** - Moderate: General positive outcomes mentioned but lacking specificity.
+- **0.2-0.3** - Weak: Vague references to change with no clear outcome.
+- **0.0-0.1** - No Clear Impact: No outcome mentioned, only intentions.
+
+### Criterion 2: Issue and Challenge Score (0.0 - 1.0)
+What to Evaluate: Problem clarity, root cause identification, and sufficient context.
+
+**Scoring Guidelines:**
+- **0.9-1.0** - Exceptional: Crystal clear problem with root cause analysis, explains symptoms and underlying causes.
+- **0.7-0.8** - Strong: Clear problem with good context, some root cause analysis present.
+- **0.4-0.6** - Moderate: Problem mentioned but vague or incomplete, limited context.
+- **0.2-0.3** - Weak: Problem barely identifiable, no context or explanation.
+- **0.0-0.1** - No Clear Problem: No problem described, story lacks focus.
+
+### Criterion 3: Action Steps Score (0.0 - 1.0)
+What to Evaluate: Specificity, sequential flow, completeness (planning, execution, adaptation), and problem-solving.
+
+**Scoring Guidelines:**
+- **0.9-1.0** - Exceptional: Detailed, sequential steps clearly outlined. Obstacles and solutions mentioned. Shows adaptation.
+- **0.7-0.8** - Strong: Clear action steps with good implementation details. Some mention of challenges.
+- **0.4-0.6** - Moderate: General actions mentioned but lacking detail or sequence.
+- **0.2-0.3** - Weak: Vague references to doing something, no clear sequence.
+- **0.0-0.1** - No Clear Actions: No actions described, only intentions.
+
+## Composite Score and Tier Assignment
+- Calculate the `composite_score` using the weighted average:
+  **Composite Score = (Impact × 0.4) + (Issue × 0.3) + (Action × 0.3)**
+
+- Assign the `tier` based on individual scores:
+    - **Excellent:** All three scores ≥ 0.75
+    - **Good:** All three scores ≥ 0.60
+    - **Developing:** All three scores ≥ 0.40
+    - **Needs Improvement:** Any score < 0.40
+
+## CRITICAL: JSON Output Format
+You MUST return EXACTLY 10 fields in your JSON response. ALL fields are mandatory. DO NOT omit any field.
+
+MANDATORY fields (all 10 must be present):
+1. document_language (string - e.g., "English", "Hindi", "Kannada")
+2. impact_and_outcome_score (float between 0.0 and 1.0)
+3. impact_justification (string - detailed justification)
+4. issue_and_challenge_score (float between 0.0 and 1.0)
+5. issue_justification (string - detailed justification)
+6. action_steps_score (float between 0.0 and 1.0)
+7. action_justification (string - detailed justification)
+8. composite_score (float between 0.0 and 1.0)
+9. tier (one of: "Excellent", "Good", "Developing", "Needs Improvement")
+10. overall_summary (string - brief 2-3 sentence summary)
+
+Example of correct format:
+{{
+    "document_language": "English",
+    "impact_and_outcome_score": 0.75,
+    "impact_justification": "The story demonstrates clear, measurable outcomes with specific evidence of improvement in student attendance rates.",
+    "issue_and_challenge_score": 0.65,
+    "issue_justification": "The root cause is identified as lack of parental awareness, with adequate context provided about the school location.",
+    "action_steps_score": 0.70,
+    "action_justification": "Action steps are described including parent meetings and awareness campaigns, showing a sequential approach.",
+    "composite_score": 0.71,
+    "tier": "Good",
+    "overall_summary": "Effective intervention addressing low attendance through parental engagement and awareness programs."
+}}
+
+## Task Instructions
+1. Read and analyze the complete PDF text content provided below.
+2. Identify the primary language of the document (e.g., "English", "Hindi", "Spanish").
+3. Score EACH of the THREE criteria (Impact, Issue, Action) with values between 0.0 and 1.0.
+4. Write detailed justifications for EACH of the three scores (analyze the story content carefully).
+5. Calculate the composite_score = (impact × 0.4) + (issue × 0.3) + (action × 0.3)
+6. Assign the tier based on the rules above.
+7. Write a brief overall_summary (2-3 sentences).
+8. Return ONLY the JSON object with ALL 10 FIELDS. No extra text, no markdown, no code blocks.
+
+## Story to Analyze
+
+**Title:** {story_title}
+
+**PDF Content:**
+---
+{pdf_content}
+---
+
+Analyze the above PDF content and return the evaluation as a valid JSON object with all 10 required fields.

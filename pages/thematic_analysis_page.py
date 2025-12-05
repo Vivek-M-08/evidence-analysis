@@ -1,6 +1,7 @@
 import streamlit as st
 from ai.thematic_processor import analyze_thematic_challenge 
 import json
+from pathlib import Path
 
 def show():
     # Set session state for analysis tracking if not already present
@@ -25,11 +26,15 @@ def show():
         input_text = st.text_area(
             "Paste a list of educational challenge statements (separated by the pipe '|' character).",
             key="thematic_input_text",
-            height=300,
+            height=100,
             placeholder="e.g., Due to poor financial condition, the girl is not able to study | Raj Kumar's daughter from ward 3 cannot go to school due to lack of Aadhaar | School infrastructure is poor",
             label_visibility="collapsed"
         )
-        
+
+        prompt_file = Path(__file__).parent.parent / "prompts" / "thematic_clasification_prompt.txt"
+        default_prompt = prompt_file.read_text() if prompt_file.exists() else ""
+        context_prompt = st.text_area("4. Prompt (Editable)", value=default_prompt, key="story_prompt_input", height=150)            
+    
         # --- AI Model Selection and Analysis Button ---
         st.markdown("<br>", unsafe_allow_html=True)
         btn_col1, btn_col2 = st.columns([1, 2])
@@ -63,7 +68,7 @@ def show():
                         st.session_state["thematic_result"] = None
                         
                         with st.spinner(f"Analyzing text using {model_choice}..."):
-                            result = analyze_thematic_challenge(input_for_processor, model_choice)
+                            result = analyze_thematic_challenge(input_for_processor, model_choice, context_prompt)
                             st.session_state["thematic_result"] = result
                             st.session_state["thematic_analysed"] = True
                             st.rerun() # Rerun to display results
