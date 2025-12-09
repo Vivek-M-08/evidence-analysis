@@ -4,21 +4,30 @@ import time
 import httpx
 import mimetypes
 import re
+import os
 from urllib.request import urlopen
 import google.generativeai as genai
 from openai import OpenAI
 import typing_extensions as typing
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # --- CONFIGURATION ---
-GEMINI_TOKENS = ["AIzaSyCpxpErkI_DgECepEvwYgEoz1Wwg4vlgUE", "AIzaSyDJloG03NCFbmnlhYikymXSpfIEYsF9c_4"]
-TOGETHER_TOKEN = "your-llama-token"
+# Load keys from .env, split by comma if multiple exist
+gemini_env = os.getenv("GEMINI_API_KEYS", "")
+GEMINI_TOKENS = [key.strip() for key in gemini_env.split(",") if key.strip()]
+
+TOGETHER_TOKEN = os.getenv("TOGETHER_API_KEY")
+
 MAX_RETRIES = 3
 current_token_index = 0
 
 # --- TOKEN HANDLING (Gemini) ---
 def get_next_gemini_token():
     global current_token_index
-    if current_token_index < len(GEMINI_TOKENS):
+    if GEMINI_TOKENS and current_token_index < len(GEMINI_TOKENS):
         return GEMINI_TOKENS[current_token_index]
     return None
 
@@ -26,7 +35,9 @@ def switch_to_next_token():
     global current_token_index
     current_token_index += 1
     if current_token_index >= len(GEMINI_TOKENS):
-        return None
+        # Reset or handle exhaustion
+        current_token_index = 0 
+        print("Warning: Cycled through all Gemini tokens.")
     return get_next_gemini_token()
 
 # --- Gemini Model Setup ---
@@ -36,11 +47,11 @@ class AnalysisResponse(typing.TypedDict):
 
 initial_token = get_next_gemini_token()
 if not initial_token:
-    raise ValueError("No valid Gemini tokens configured.")
+    raise ValueError("No valid Gemini tokens found in .env file.")
 
 genai.configure(api_key=initial_token)
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-2.5-flash",
     generation_config={
         "response_mime_type": "application/json",
         "response_schema": AnalysisResponse,
@@ -48,10 +59,15 @@ model = genai.GenerativeModel(
 )
 
 # --- OpenAI (SambaNova) Setup ---
-client = OpenAI(
-    base_url="https://api.sambanova.ai/v1",
-    api_key=TOGETHER_TOKEN
-)
+# Only initialize if token exists to prevent crash
+if TOGETHER_TOKEN:
+    client = OpenAI(
+        base_url="https://api.sambanova.ai/v1",
+        api_key=TOGETHER_TOKEN
+    )
+else:
+    client = None
+    print("Warning: TOGETHER_API_KEY not found in .env")
 
 # --- Helper: Convert image to base64 ---
 def get_image_as_base64(url: str) -> str:
@@ -67,6 +83,8 @@ def calculate_relevance_tag(answers):
     if not answers or not isinstance(answers, list):
         return 'Irrelevant'
     yes_count = sum(1 for answer in answers if str(answer).upper() == 'YES')
+    if len(answers) == 0: return 'Irrelevant'
+    
     percentage = (yes_count / len(answers)) * 100
     if percentage >= 50:
         return 'Relevant'
@@ -91,7 +109,9 @@ def extract_structured_response(response_text):
     answers = [a.strip() for a in answers_match.group(1).split(",")] if answers_match else []
     answers = [a.upper()[:3] for a in answers if a.upper().startswith(("YES", "NO"))]
     reasonings = [item[1].strip() for item in sorted(reasonings_match, key=lambda x: int(x[0]))]
-    if len(answers) != 3 or len(reasonings) != 3:
+    
+    # Relaxed validation to allow partial parsing if strict 3 count fails
+    if not answers:
         return None
     return {"answers": answers, "reasonings": reasonings}
 
@@ -137,8 +157,8 @@ def analyze_evidence(image_url: str, prompt: str, use_openai: bool = False):
             print(f"[Gemini Error] {e}")
             break
 
-    # Step 2: OpenAI fallback (if enabled)
-    if use_openai:
+    # Step 2: OpenAI fallback (if enabled and client exists)
+    if use_openai and client:
         for _ in range(MAX_RETRIES):
             try:
                 openai_response = client.chat.completions.create(
